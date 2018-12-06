@@ -3,7 +3,7 @@ package HW
 import (
     "fmt"
     "errors"
-    "MPredictor/model"
+    "HoltWinters/model"
 )
 
 /*

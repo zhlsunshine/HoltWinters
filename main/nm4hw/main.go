@@ -2,9 +2,10 @@ package main
 
 import (
     "fmt"
-    "MPredictor/model"
-    "MPredictor/training"
-    "MPredictor/holt-winters"
+    "HoltWinters/model"
+    "HoltWinters/utils"
+    "HoltWinters/training"
+    "HoltWinters/holt-winters"
 )
 
 
@@ -15,6 +16,8 @@ func main() {
         }
     }()
     fmt.Println("Execute ConfigureLogger")
+    model.HWPInstance.SSEP = float64(9223372036854775807)
+    utils.CheckMDir(model.MFDir, model.MFName) 
     var trainP = new(model.TrainProp)
     trainP.Precision = 3
     trainP.TrainStep = float64(0.001) 
@@ -45,5 +48,6 @@ func main() {
         r_o_data = append(r_o_data, &model.RawData{float64(r_data[i]), "", 0})
     }
  
-    training.TrainingController(s_o_data, r_o_data, trainP)
+    //training.TrainingController(s_o_data, r_o_data, trainP)
+    training.NelderMeadTraining(s_o_data, r_o_data, trainP)
 }
