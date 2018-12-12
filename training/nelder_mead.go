@@ -52,7 +52,12 @@ func OrderVerticsValue(rSimplex *model.Simplex, series []*model.RawData, r_serie
     fmt.Println("OrderVerticsValue Begin")
     for index, item := range rSimplex.Vertics {
         if rSimplex.Vertics[index].VerticValue == 0 {
-            pData, _ := HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, item.Alpha, item.Beta, item.Gamma)
+            var pData []*model.PredictData
+            if trainP.TrainMode == "add" {
+                pData, _ = HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, item.Alpha, item.Beta, item.Gamma)
+            } else {
+                pData, _ = HW.MultiplicativeHoltWinters(series, trainP.WindowSize, trainP.PredictSize, item.Alpha, item.Beta, item.Gamma)
+            }
             fitValue := Fitting4NelderMead(r_series, pData)
             rSimplex.Vertics[index].VerticValue = fitValue
         }
@@ -209,7 +214,12 @@ func NelderMeadTraining(series []*model.RawData, r_series []*model.RawData, trai
         }
         endI   := rSimplex.Vertics.Len() - 1
         rPoint := CalReflectionPoint(rSimplex, centPoint, model.Alpha)
-        pData, _ := HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+        var pData []*model.PredictData
+        if trainP.TrainMode == "add" {
+            pData, _ = HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+        } else {
+            pData, _ = HW.MultiplicativeHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+        }
         fitValue := Fitting4NelderMead(r_series, pData)
         rPoint.VerticValue = fitValue
         fmt.Println("Reflection Point: ", *rPoint, "   rSimplex best Vertics: ", rSimplex.Vertics[startI], "   rSimplex worst Vertics: ", rSimplex.Vertics[endI])
@@ -226,7 +236,12 @@ func NelderMeadTraining(series []*model.RawData, r_series []*model.RawData, trai
 
         if rPoint.VerticValue < rSimplex.Vertics[startI].VerticValue {
             ePoint := CalExpansionPoint(rSimplex, rPoint, centPoint, model.Alpha, model.Gamma)
-            pData, _ := HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, ePoint.Alpha, ePoint.Beta, ePoint.Gamma)
+            var pData []*model.PredictData
+            if trainP.TrainMode == "add" {
+                pData, _ = HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+            } else {
+                pData, _ = HW.MultiplicativeHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+            }
             fitValue := Fitting4NelderMead(r_series, pData)
             ePoint.VerticValue = fitValue
             fmt.Println("Expansion Point: ", *ePoint)
@@ -247,7 +262,12 @@ func NelderMeadTraining(series []*model.RawData, r_series []*model.RawData, trai
         if rPoint.VerticValue >= rSimplex.Vertics[endI-1].VerticValue {
             if rPoint.VerticValue < rSimplex.Vertics[endI].VerticValue {
                 cPoint := CalContractionPoint(rSimplex, centPoint, model.Rho, true)
-                pData, _ := HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, cPoint.Alpha, cPoint.Beta, cPoint.Gamma)
+                var pData []*model.PredictData
+                if trainP.TrainMode == "add" {
+                    pData, _ = HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+                } else {
+                    pData, _ = HW.MultiplicativeHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+                }
                 fitValue := Fitting4NelderMead(r_series, pData)
                 cPoint.VerticValue = fitValue
                 fmt.Println("Out Contraction Point: ", *cPoint)
@@ -263,7 +283,12 @@ func NelderMeadTraining(series []*model.RawData, r_series []*model.RawData, trai
 
         if rPoint.VerticValue >= rSimplex.Vertics[endI].VerticValue {
                 cPoint := CalContractionPoint(rSimplex, centPoint, model.Rho, false)
-                pData, _ := HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, cPoint.Alpha, cPoint.Beta, cPoint.Gamma)
+                var pData []*model.PredictData
+                if trainP.TrainMode == "add" {
+                    pData, _ = HW.AdditiveHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+                } else {
+                    pData, _ = HW.MultiplicativeHoltWinters(series, trainP.WindowSize, trainP.PredictSize, rPoint.Alpha, rPoint.Beta, rPoint.Gamma)
+                }
                 fitValue := Fitting4NelderMead(r_series, pData)
                 cPoint.VerticValue = fitValue
                 fmt.Println("In Contraction Point: ", *cPoint)
@@ -291,4 +316,11 @@ func NelderMeadTraining(series []*model.RawData, r_series []*model.RawData, trai
         utils.SaveData(jPackage, model.MFName)
         fmt.Println("Current Simplex Model is: ", *rSimplex) 
     }
+
+    model.Lock.Lock()
+    model.HWPInstance.SSEP = rSimplex.Vertics[0].VerticValue 
+    model.HWPInstance.Alpha = rSimplex.Vertics[0].Alpha
+    model.HWPInstance.Beta = rSimplex.Vertics[0].Beta
+    model.HWPInstance.Gamma = rSimplex.Vertics[0].Gamma
+    model.Lock.Unlock()
 }

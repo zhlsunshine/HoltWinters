@@ -2,6 +2,7 @@ package HW
 
 import (
     "fmt"
+    "math"
     "errors"
     "HoltWinters/model"
 )
@@ -21,8 +22,8 @@ func InitialTrend(series []*model.RawData, w_size int) (float64, error) {
     }()
     sum := float64(0.0)
     rawlen :=  len(series)
-    fmt.Println("Raw Data Lenght: ", rawlen)
-    fmt.Println("Moving Window: ", w_size)
+    // fmt.Println("Raw Data Lenght: ", rawlen)
+    // fmt.Println("Moving Window: ", w_size)
     if (rawlen / w_size) < 2 {
         fmt.Errorf("Trend Initiation Error Due to The Wrong Raw Data!")
         return float64(0.0), errors.New("Trend Initiation Error Due to The Wrong Raw Data!")
@@ -40,7 +41,7 @@ func InitialTrend(series []*model.RawData, w_size int) (float64, error) {
  *Auth: zhanghuailong
  *Time: 2018-11-26
  */
-func InitialSeasonal(series []*model.RawData, w_size int) ([]model.SeasonalFactor, error) {
+func InitialSeasonal(series []*model.RawData, w_size int, isAdd bool) ([]model.SeasonalFactor, error) {
     fmt.Println("InitialSeasonal Begin")
     defer func() {
         if err := recover(); err != nil {
@@ -50,7 +51,7 @@ func InitialSeasonal(series []*model.RawData, w_size int) ([]model.SeasonalFacto
     }()
     
     n_seasons := int(len(series)/w_size)
-    fmt.Println("Season N: ", n_seasons)
+    // fmt.Println("Season N: ", n_seasons)
     var season_averages = make([]float64, n_seasons)
     var seasons = make([]model.SeasonalFactor, w_size)
 
@@ -62,7 +63,7 @@ func InitialSeasonal(series []*model.RawData, w_size int) ([]model.SeasonalFacto
             sum += series[j].Value
         }
         average := sum / float64(w_size)
-        fmt.Println(i, "th average is: ", average)
+        // fmt.Println(i, "th average is: ", average)
         tmp := season_averages
         season_averages = append(tmp, average)
         // season_averages[i] = average
@@ -73,42 +74,46 @@ func InitialSeasonal(series []*model.RawData, w_size int) ([]model.SeasonalFacto
     for k:=0; k<w_size; k++ {
         sum_of_vals_over_avg := float64(0.0)
         for l:=0; l<n_seasons; l++ {
-            sum_of_vals_over_avg += series[l*w_size+k].Value - season_averages[l]
+            if isAdd {
+                sum_of_vals_over_avg += series[l*w_size+k].Value - season_averages[l]
+            } else  {
+                sum_of_vals_over_avg += series[l*w_size+k].Value / season_averages[l]
+            }
         }
         var item model.SeasonalFactor
         item.Index = int64(k)
         item.Factor = sum_of_vals_over_avg / float64(n_seasons)
         tmp := seasons
         seasons = append(tmp, item)
-        fmt.Println(k, "th sum of vals over avg is: ", item.Factor)
+        // fmt.Println(k, "th sum of vals over avg is: ", item.Factor)
     }
     return seasons, nil
 }
 
 /*
- *Desc: Implement the algorithm of holt-winters 
+ *Desc: Implement the additive algorithm of holt-winters 
  *Auth: zhanghuailong
  *Time: 2018-11-26
  */
 func AdditiveHoltWinters(series []*model.RawData, w_size int, n_preds int, alpha, beta, gamma float64) ([]*model.PredictData, error) {
-    fmt.Println("HoltWinters Begin")
+    fmt.Println("Additive HoltWinters Begin")
     defer func() {
         if err := recover(); err != nil {
-            fmt.Errorf("Error Occur For Holt Winters! \n Error: ", err)
+            fmt.Errorf("Error Occur For Additive Holt Winters! \n Error: ", err)
         }
-        fmt.Println("HoltWinters End")
+        fmt.Println("Additive HoltWinters End")
     }()
 
     var trend float64
     var results []*model.PredictData
-    seasonals, _ := InitialSeasonal(series, w_size)
+    seasonals, _ := InitialSeasonal(series, w_size, true)
     smooth := series[0].Value
     pre_smooth := series[0].Value
     loop := len(series) + n_preds
     for i:=0; i<loop; i++ {
         if i == 0 {
             trend, _ = InitialTrend(series, w_size)
-            fmt.Println("Initial Trend Value: ", trend)
+            // fmt.Println("Initial Trend Value: ", trend)
             /*tmp := results
             item := &model.PredictData{0, series[0].Value}
             results = append(tmp, item)*/
@@ -120,15 +125,78 @@ func AdditiveHoltWinters(series []*model.RawData, w_size int, n_preds int, alpha
             mark := float64(len(series)/w_size)
             preditor := (smooth + mark*trend) + seasonals[i%w_size].Factor
             tmp := results
-            item := &model.PredictData{int64(i), preditor}
+            pindex := i - len(series)
+            item := &model.PredictData{int64(pindex), preditor}
             results = append(tmp, item)
         } else  {
             val := series[i].Value
             pre_smooth = smooth
             pre_trend := trend
-            smooth := alpha*(val-seasonals[i%w_size].Factor) + (1-alpha)*(smooth+trend)
+            smooth := alpha*(val-seasonals[i%w_size].Factor) + (1-alpha)*(pre_smooth+pre_trend)
             trend = beta * (smooth-pre_smooth) + (1-beta)*pre_trend
-            seasonals[i%w_size].Factor = float64(gamma*(val-smooth-pre_trend) + (1-gamma)*seasonals[i%w_size].Factor)
+            seasonals[i%w_size].Factor = float64(gamma*(val-pre_smooth-pre_trend) + (1-gamma)*seasonals[i%w_size].Factor)
+            // seasonals[i%w_size].Factor = float64(gamma*(val-pre_smooth) + (1-gamma)*seasonals[i%w_size].Factor)
+            /*tmp := results
+            item := &model.PredictData{int64(i), smooth+trend+seasonals[i%w_size].Factor}
+            results = append(tmp, item)*/
+        }
+    }
+    return results, nil
+}
+
+/*
+ *Desc: Implement the multiplicative algorithm of holt-winters 
+ *Auth: zhanghuailong
+ *Time: 2018-12-11
+ */
+func MultiplicativeHoltWinters(series []*model.RawData, w_size int, n_preds int, alpha, beta, gamma float64) ([]*model.PredictData, error) {
+    fmt.Println("Multiplicative HoltWinters Begin")
+    defer func() {
+        if err := recover(); err != nil {
+            fmt.Errorf("Error Occur For Multiplicative Holt Winters! \n Error: ", err)
+        }
+        fmt.Println("Multiplicative HoltWinters End")
+    }()
+
+    var trend float64
+    var results []*model.PredictData
+    seasonals, _ := InitialSeasonal(series, w_size, false)
+    smooth := series[0].Value
+    pre_smooth := series[0].Value
+    loop := len(series) + n_preds
+    for i:=0; i<loop; i++ {
+        if i == 0 {
+            trend, _ = InitialTrend(series, w_size)
+            // fmt.Println("Initial Trend Value: ", trend)
+            /*tmp := results
+            item := &model.PredictData{0, series[0].Value}
+            results = append(tmp, item)*/
+            continue
+        }
+
+        if i >= len(series) {
+            // mark := float64(i - len(series) + 1)
+            mark := float64(len(series)/w_size)
+            preditor := (smooth + mark*trend) * seasonals[i%w_size].Factor
+            tmp := results
+            pindex := i - len(series)
+            item := &model.PredictData{int64(pindex), preditor}
+            results = append(tmp, item)
+        } else  {
+            val := series[i].Value
+            pre_smooth = smooth
+            pre_trend := trend
+            if math.IsInf(val/seasonals[i%w_size].Factor, 0) {
+                seasonals[i%w_size].Factor = float64(1) / float64(model.PRECISE_FOR_INF)
+            }
+            smooth := alpha*(val/seasonals[i%w_size].Factor) + (1-alpha)*(pre_smooth+pre_trend)
+            trend = beta * (smooth-pre_smooth) + (1-beta)*pre_trend
+
+            if math.IsInf(val/(pre_smooth+pre_trend), 0) {
+                smooth = float64(1) / float64(model.PRECISE_FOR_INF)
+            }
+            seasonals[i%w_size].Factor = float64(gamma*(val/(pre_smooth+pre_trend)) + (1-gamma)*seasonals[i%w_size].Factor)
+            // seasonals[i%w_size].Factor = float64(gamma*(val/(pre_smooth)) + (1-gamma)*seasonals[i%w_size].Factor)
             /*tmp := results
             item := &model.PredictData{int64(i), smooth+trend+seasonals[i%w_size].Factor}
             results = append(tmp, item)*/

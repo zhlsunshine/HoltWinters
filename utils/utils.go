@@ -27,12 +27,20 @@ func SaveData(data []byte, filedir string) {
     ioutil.WriteFile(filedir, data, 0777)
 }
 
+func LoadData(filedir string) []byte {
+    databuf, err := ioutil.ReadFile(filedir)
+    if err != nil {
+        panic(fmt.Sprintf("Read file %s failed! error : %s", filedir, err))
+    }
+    return databuf
+}
+
 func CheckMDir(fileFolder string, filePath string) bool {
     if _, err := os.Stat(fileFolder); os.IsNotExist(err) {
         if err != nil {
             fmt.Errorf("create user data directory: %s error!+%v\n", fileFolder, err)
         }
-        fmt.Printf("create user data directory: %s\n", fileFolder)
+        fmt.Println("create user data directory: %s\n", fileFolder)
         os.Mkdir(fileFolder, 0777)
         return false
     }
